@@ -1,0 +1,96 @@
+# Deploy to VPS via SSH
+# Triggered manually or after a successful release.
+
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  deploy:
+    name: Deploy to ${{ github.event.inputs.environment || 'production' }}
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    environment:
+      name: ${{ github.event.inputs.environment || 'production' }}
+      url: https://${{ vars.DEPLOY_HOST }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install and build
+        run: |
+          npm ci
+          npm run build
+
+      - name: Create deployment tarball
+        run: |
+          tar -czf deploy.tar.gz \
+            dist/ \
+            package.json \
+            package-lock.json
+
+      - name: Copy files to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: deploy.tar.gz
+          target: /tmp/
+
+      - name: Execute deployment
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e
+
+            APP_DIR="${{ vars.APP_DIR || '/var/www/app' }}"
+            BACKUP_DIR="${APP_DIR}_backup_$(date +%Y%m%d_%H%M%S)"
+
+            echo "==> Backing up current deployment..."
+            cp -r "$APP_DIR" "$BACKUP_DIR" 2>/dev/null || true
+
+            echo "==> Extracting new build..."
+            cd "$APP_DIR"
+            tar -xzf /tmp/deploy.tar.gz
+
+            echo "==> Installing production dependencies..."
+            npm ci --omit=dev
+
+            echo "==> Restarting application..."
+            pm2 restart "${{ vars.PM2_APP_NAME || 'app' }}" || \
+              pm2 start dist/server.js --name "${{ vars.PM2_APP_NAME || 'app' }}"
+
+            echo "==> Cleaning up..."
+            rm -f /tmp/deploy.tar.gz
+
+            echo "==> Deployment complete!"
+            pm2 status

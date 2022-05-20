@@ -1,0 +1,17 @@
+{
+  "name": "@idirdev/gh-actions-toolkit",
+  "version": "1.0.0",
+  "description": "Reusable GitHub Actions workflow collection for CI/CD, releases, Docker, and security",
+  "author": "idirdev",
+  "license": "MIT",
+  "scripts": {
+    "lint": "echo 'Workflow linting placeholder'",
+    "test": "echo 'No tests configured yet'",
+    "version:patch": "bash scripts/version-bump.sh patch",
+    "version:minor": "bash scripts/version-bump.sh minor",
+    "version:major": "bash scripts/version-bump.sh major"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0"
+  }
+}

@@ -1,0 +1,112 @@
+# PR Check: Auto-label PRs and check size
+# Runs on every pull request event.
+
+name: PR Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  label:
+    name: Auto-label PR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Label based on changed files
+        uses: actions/labeler@v5
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          sync-labels: true
+
+  size-check:
+    name: PR Size Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Calculate diff size
+        id: diff
+        run: |
+          BASE="${{ github.event.pull_request.base.sha }}"
+          HEAD="${{ github.event.pull_request.head.sha }}"
+
+          ADDITIONS=$(git diff --stat "$BASE..$HEAD" | tail -1 | grep -oP '\d+ insertion' | grep -oP '\d+' || echo "0")
+          DELETIONS=$(git diff --stat "$BASE..$HEAD" | tail -1 | grep -oP '\d+ deletion' | grep -oP '\d+' || echo "0")
+          TOTAL=$((ADDITIONS + DELETIONS))
+
+          echo "additions=$ADDITIONS" >> "$GITHUB_OUTPUT"
+          echo "deletions=$DELETIONS" >> "$GITHUB_OUTPUT"
+          echo "total=$TOTAL" >> "$GITHUB_OUTPUT"
+
+          # Determine size label
+          if [ "$TOTAL" -lt 10 ]; then
+            SIZE="XS"
+          elif [ "$TOTAL" -lt 50 ]; then
+            SIZE="S"
+          elif [ "$TOTAL" -lt 200 ]; then
+            SIZE="M"
+          elif [ "$TOTAL" -lt 500 ]; then
+            SIZE="L"
+          else
+            SIZE="XL"
+          fi
+          echo "size=$SIZE" >> "$GITHUB_OUTPUT"
+
+      - name: Add size label
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const size = '${{ steps.diff.outputs.size }}';
+            const label = `size/${size}`;
+            const { owner, repo } = context.repo;
+            const prNumber = context.issue.number;
+
+            // Remove existing size labels
+            const currentLabels = await github.rest.issues.listLabelsOnIssue({
+              owner, repo, issue_number: prNumber,
+            });
+            for (const l of currentLabels.data) {
+              if (l.name.startsWith('size/')) {
+                await github.rest.issues.removeLabel({
+                  owner, repo, issue_number: prNumber, name: l.name,
+                });
+              }
+            }
+
+            // Add new size label
+            await github.rest.issues.addLabels({
+              owner, repo, issue_number: prNumber, labels: [label],
+            });
+
+      - name: Warn on large PRs
+        if: steps.diff.outputs.total > 500
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const total = ${{ steps.diff.outputs.total }};
+            const additions = ${{ steps.diff.outputs.additions }};
+            const deletions = ${{ steps.diff.outputs.deletions }};
+
+            await github.rest.issues.createComment({
+              ...context.repo,
+              issue_number: context.issue.number,
+              body: [
+                '> **Large PR detected** -- consider breaking this into smaller PRs.',
+                '',
+                `| Metric | Count |`,
+                `|--------|-------|`,
+                `| Additions | +${additions} |`,
+                `| Deletions | -${deletions} |`,
+                `| Total changes | ${total} |`,
+              ].join('\n'),
+            });
