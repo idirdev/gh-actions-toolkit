@@ -6,7 +6,9 @@
   "license": "MIT",
   "scripts": {
     "lint": "echo 'Workflow linting placeholder'",
-    "test": "echo 'No tests configured yet'",
+    "test": "bash tests/run-tests.sh",
+    "test:version": "bash tests/run-tests.sh version",
+    "test:deploy": "bash tests/run-tests.sh deploy",
     "version:patch": "bash scripts/version-bump.sh patch",
     "version:minor": "bash scripts/version-bump.sh minor",
     "version:major": "bash scripts/version-bump.sh major"
