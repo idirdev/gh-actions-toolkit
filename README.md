@@ -69,3 +69,31 @@ VPS_HOST=your-server VPS_USER=deploy APP_DIR=/var/www/app PM2_APP_NAME=my-app \
 ## License
 
 MIT
+
+---
+
+## 🇫🇷 Documentation en français
+
+### Description
+gh-actions-toolkit est une collection de workflows GitHub Actions réutilisables pour CI/CD, releases automatiques, déploiement Docker et analyses de sécurité. Il inclut également un script de bump de version sémantique avec intégration Git (commit + tag automatiques).
+
+### Installation
+Copiez les fichiers `.yml` du répertoire `.github/workflows/` dans votre dépôt. Configurez les secrets GitHub requis (`VPS_HOST`, `VPS_USER`, `VPS_KEY`, `PM2_APP_NAME`).
+
+### Utilisation
+```bash
+# Bumper la version et créer un tag
+npm run version:patch   # 1.0.0 -> 1.0.1
+npm run version:minor   # 1.0.0 -> 1.1.0
+npm run version:major   # 1.0.0 -> 2.0.0
+
+# Pousser le tag pour déclencher le déploiement
+git push origin main --follow-tags
+```
+
+### Lancer les tests
+```bash
+npm test
+```
+
+Consultez la documentation en anglais ci-dessus pour la liste complète des workflows et la configuration des environnements protégés.
